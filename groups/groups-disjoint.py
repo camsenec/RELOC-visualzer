@@ -15,16 +15,25 @@ print("Loading...")
 followers_df_all = pd.read_table('../input/user_sns.txt', names=('follower', 'followee'))
 print("Loaded")
 
-id_from = 1000000
-#id_to = 1100000
-id_to = 1025000 #10 gruop
-id_to = 1021000 #5 gruop
-limit = 5
 
-a = followers_df_all[followers_df_all["followee"] > id_from]
-b = a[a["followee"] <= id_to]
-c = b[b["follower"] > id_from]
-followers_df = c[c["follower"] <= id_to]
+##### disjoint
+id_from = 1000000
+#id_to = 1100000 #914 group
+#id_to = 1046170 #100 group
+id_to = 1025000 #[5 group]
+#id_to = 1021000 #5 gruop
+#id_to = 1019000 #3 gruop
+#id_to = 1011000 #1 group
+#id_to = 1146580
+#id_to = 1079100 #100 group (10)
+#id_to = 1072733
+limit = 5
+#limit = 10
+
+df = followers_df_all[followers_df_all["followee"] > id_from]
+upper = df[df["followee"] <= id_to]
+lower = upper[upper["follower"] > id_from]
+followers_df = lower[lower["follower"] <= id_to]
 
 #users who belongs to a group whose size is greater than or equal to 5
 followers_count_df = followers_df.groupby(['follower']).size()
@@ -34,72 +43,46 @@ selected_df =  followers_df.merge(followers_with_enough_followees_df,
                left_on = 'follower',
                right_on = 'follower')
 
-groups = selected_df.groupby('follower')['followee'].apply(list)
-groups_comb = selected_df.groupby('follower')['followee'].apply(list)
-groups_df = pd.DataFrame(groups).reset_index()
-#groups_df.to_csv("../out/tx_log.csv", index=True, header=False)
-
-groups_for_viz = groups.copy()
+groups_tmp = selected_df.groupby('follower')['followee'].apply(list)
 
 # append self
-for send_from in groups.keys():
-    groups[send_from].append(send_from)
+for send_from in groups_tmp.keys():
+    groups_tmp[send_from].append(send_from)
+
+d = {}
+client_list = []
+for send_from in groups_tmp.keys():
+    l = []
+    g = groups_tmp[send_from]
+    for c in g:
+        if c not in client_list:
+            l.append(c)
+        if send_from in l and len(l) >= limit+1:
+            l.remove(send_from)
+            client_list.extend(l)
+            d[send_from] = l
+        elif send_from not in l and len(l) >= limit:
+            client_list.extend(l)
+            d[send_from] = l
+
+groups = pd.Series(data=d, name='followee') 
+groups_comb = pd.Series(data=d, name='followee')
+groups_for_viz = pd.Series(data=d, name='followee') 
+groups_df = pd.DataFrame(groups).reset_index()
+
+# append self
+for send_from in groups_comb.keys():
+    #groups[send_from].append(send_from)
     groups_comb[send_from].append(send_from)
 
-
-
 # extract all possible pairs in the group
-for send_from in groups.keys():
-  groups[send_from] = list(itertools.permutations(groups[send_from],2))
+for send_from in groups_comb.keys():
+  #groups[send_from] = list(itertools.permutations(groups[send_from],2))
   groups_comb[send_from] = list(itertools.combinations(groups_comb[send_from],2))
 
-pairs = []
-for send_from in groups.keys():
-    pairs.extend(groups[send_from])
-
-sender_receiver = pd.DataFrame(pairs, columns= ["sender","receiver"]); sender_receiver["count"] = 1
-pivot_table = sender_receiver.pivot_table(values="count",index='sender', columns='receiver', aggfunc = 'count').fillna(0)
-pivot_matrix = pivot_table.values
-
-# Matrix Factorization by SVD (Singular Value Decomposition)
-NUMBER_OF_FACTORS_MF = int(pivot_table.shape[0] * (0.1))
-U, sigma, Vt = svds(pivot_matrix, k = NUMBER_OF_FACTORS_MF)
-sigma = np.diag(sigma)
-
-predicted_ratings = np.dot(np.dot(U, sigma), Vt)
-svd_preds_df = pd.DataFrame(predicted_ratings, columns = pivot_table.columns, index=pivot_table.index)
-
-res = pd.DataFrame(columns=['related_clients'])
-for client_id in svd_preds_df.keys():
-    sorted_client_predictions = list(svd_preds_df[client_id].sort_values(ascending=False).keys())
-    res.loc[client_id] = [sorted_client_predictions]
-
-#res.to_csv('../out/relationship.csv', header = False, index=True)
 print("Done")
 
-
-# In[3]:
-
-
-edges = set()
 tmp_nodes = set()
-for rep in groups_for_viz.keys():
-    tmp_nodes.add(rep)
-    for other in groups_for_viz[rep]:
-        edges.add((rep,other))
-        tmp_nodes.add(other)
-edges = list(edges)
-
-clients_df = pd.read_csv("clientCache.csv", names = ["application_id", "client_id", "x", "y", "home_id"])
-nodes = list()
-for i in range(len(clients_df)):
-    if clients_df.iloc[i]["client_id"] in tmp_nodes:
-        nodes.append((clients_df.iloc[i]["client_id"], {"pos" : [clients_df.iloc[i]["x"], clients_df.iloc[i]["y"]]}))
-
-
-# In[4]:
-
-
 edges = set()
 for g in groups_comb:
     for p in g:
@@ -107,14 +90,12 @@ for g in groups_comb:
         tmp_nodes.add(p[0]); tmp_nodes.add(p[1])
 edges = list(edges)
 
-clients_df = pd.read_csv("clientCache.csv", names = ["application_id", "client_id", "x", "y", "home_id"])
+clients_df = pd.read_csv("./disjoint/client-group-5-doc-1-loc-1-cluster-4-method-RA.csv", names = ["application_id", "client_id", "x", "y", "home_id"])
 nodes = list()
 for i in range(len(clients_df)):
     if clients_df.iloc[i]["client_id"] in tmp_nodes:
         nodes.append((clients_df.iloc[i]["client_id"], {"pos" : [clients_df.iloc[i]["x"], clients_df.iloc[i]["y"]]}))
 
-
-# In[28]:
 
 
 import plotly.graph_objects as go
@@ -162,7 +143,7 @@ node_trace = go.Scatter(
         #'Reds' | 'Blues' | 'Picnic' | 'Rainbow' | 'Portland' | 'Jet' |
         #'Hot' | 'Blackbody' | 'Earth' | 'Electric' | 'Viridis' |
         colorscale='YlGnBu',
-        reversescale=True,
+        reversescale=False,
         color=[],
         size=15,
         colorbar=dict(
@@ -195,15 +176,16 @@ fig = go.Figure(data=[edge_trace, node_trace],
                 #    showarrow=False,
                 #    xref="paper", yref="paper",
                 #    x=0.005, y=-0.002 ) ],
-                xaxis=dict(range=[0,100],showgrid=True, zeroline=True, showticklabels=True),
-                yaxis=dict(range=[0,100],showgrid=True, zeroline=True, showticklabels=True))
-                )
-#fig.to_image(format="png", engine="kaleido")
+                xaxis=dict(range=[0,25],showgrid=True, zeroline=True, showticklabels=True, title = 'x (km)'),
+                yaxis=dict(range=[0,25],showgrid=True, zeroline=True, showticklabels=True, title = 'y (km)')
+             )
+        )
+                
+
+                #fig.to_image(format="png", engine="kaleido")
 print("saving...")
-fig.write_image("group5_limit5.png")
+fig.write_image("./disjoint/group5_limit5.png")
 
-
-# In[32]:
 
 
 import seaborn as sns
@@ -214,10 +196,7 @@ for i, row in enumerate(groups_df["followee"]):
 
 sns.set(rc={'figure.figsize':(11.7,8.27)})
 ax = sns.histplot(data = groups_df, x = "size", binwidth = 1)
-ax.figure.savefig("group5_limit5_hist.png")
-
-
-# In[ ]:
+ax.figure.savefig("./disjoint/group5_limit5_hist.png")
 
 
 
