@@ -165,11 +165,12 @@ node_trace.text = node_text
 
 fig = go.Figure(data=[edge_trace, node_trace],
              layout=go.Layout(
-                titlefont_size=16,
-                font_size=24,
+                title={"text": "Client distribution (disjoint)", "x": 0.5, "y": 0.95},
+                titlefont_size=32,
+                font_size=32,
                 showlegend=False,
                 hovermode='closest',
-                margin=dict(b=20,l=5,r=5,t=40),
+                margin=dict(b=20,l=5,r=5,t=120),
                 width = 1000,
                 height = 1000,
                 #annotations=[ dict(
